@@ -43,11 +43,11 @@ int i, n_sorts;
 void build_main_window();
 void build_info_window();
 void process_input();
+void update_game_menu();
+void update_values(int position);
 
 void print_in_middle(WINDOW *win, int starty, int startx, int width, char *string, chtype color);
 void set_colors();
-void update_game_menu();
-void update_values(int position);
 void usage();
 
 int main(int argc, char *argv[])
@@ -120,7 +120,7 @@ void build_main_window()
     mvwhline(main_window, 2, 1, ACS_HLINE, width);
     mvwaddch(main_window, 2, main_window_width - 1, ACS_RTEE);
 
-    /* Create game menu (game_items need to be NULL terminated) */
+    /* Create vartical game menu (game_items need to be NULL terminated) */
     game_items = malloc((get_game_count() + 1) * sizeof(ITEM *));
     for(i = 0; i < get_game_count(); i++)
         game_items[i] = new_item(games[i]->slug, games[i]->description);
@@ -132,7 +132,6 @@ void build_main_window()
     set_menu_format(game_menu, main_window_height - 4, 1);
     set_menu_mark(game_menu, " > ");
 
-    /* Post the menues */
     post_menu(game_menu);
 }
 
@@ -167,7 +166,7 @@ void build_info_window()
     times_played_value = newwin(1, info_window_width - 2, 10, main_window_width + 1);
     game_state_value = newwin(1, info_window_width - 2, 13, main_window_width + 1);
 
-    /* Create sorter menu */
+    /* Create horizontal sorter menu without descriptions */
     n_sorts = ARRAY_SIZE(sort_menu_items);
     sort_items = (ITEM **)calloc(n_sorts, sizeof(ITEM *));
     for(i = 0; i < n_sorts; ++i)
@@ -181,7 +180,6 @@ void build_info_window()
     set_menu_mark(sort_menu, " ");
 
     post_menu(sort_menu);
-
     wrefresh(info_window);
     wrefresh(manufacturer_label);
     wrefresh(year_label);
