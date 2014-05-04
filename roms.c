@@ -8,25 +8,32 @@
 #include "xmlparser.h"
 
 rom_data *roms = NULL;
-
 rom_data **games_ptr = NULL;
+
+const char *game_xml = NULL;
 
 int num_games = 0;
 int num_roms = 0;
 int num_allocated = 0;
 
-const char *game_xml;
-
-int build_rom_list(const char *verify_command, const char *mame_xml_path, const char *game_xml_path)
+int build_rom_list(const char *mame_ini_path, const char *game_xml_path)
 {
     game_xml = game_xml_path;
 
+    int length = strlen(mame_ini_path) + (strlen(TEMPLATE_VERIFY) - 2) + 1;
+    char verify_command[length];
+    sprintf(verify_command, TEMPLATE_VERIFY, mame_ini_path);
+    verify_command[length - 1] = '\0';
+
     /* Try to load from custom list.
      *
-     * If the custom list is not present, try to generate and save one.
+     * If the custom list is not present, a new mame.xml is generated.
+     * The system then builds its custom xml file with only the needed info and available romsa.
      */
     if(load_rom_list(game_xml_path) != 0) {
-        get_available_roms(verify_command);
+        get_available_roms(verify_command);    
+        char *mame_xml_path = "/tmp/mame.xml";
+        system(TEMPLATE_BUILD_XML);
 
         if(get_rom_count() > 0) {
             if(set_rom_info(mame_xml_path) != 0)

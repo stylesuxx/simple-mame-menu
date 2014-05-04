@@ -10,6 +10,9 @@ static const char XPATH_MANUFACTURER[] = "/mame/game[@name='%s']/manufacturer";
 static const char XPATH_BIOS[] = "/mame/game[@name='%s']/@isbios";
 static const char XPATH_DEVICE[] = "/mame/game[@name='%s']/@isdevice";
 
+static const char TEMPLATE_VERIFY[] = "mame -inipath %s -verifyroms";
+static const char TEMPLATE_BUILD_XML[] = "mame -listxml > /tmp/mame.xml";
+
 typedef struct rom_data {
   char *slug;
   char *description;
@@ -21,7 +24,7 @@ typedef struct rom_data {
   int device;
 } rom_data;
 
-int build_rom_list(const char *verify_command, const char *mame_xml_path, const char *game_xml_path);
+int build_rom_list(const char *mame_ini_path, const char *game_xml_path);
 rom_data* get_roms();
 rom_data** get_all_games();
 
