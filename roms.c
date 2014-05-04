@@ -334,9 +334,12 @@ int load_rom_list(const char *path)
                 if((!xmlStrcmp(properties->name, (const xmlChar *) "description")))
                     rom.description = (char *) xmlNodeGetContent(properties);
 
-                char *ptr;
-                if((!xmlStrcmp(properties->name, (const xmlChar *) "times_played")))
-                    rom.times_played = strtol((char *) xmlNodeGetContent(properties), &ptr, 10);
+
+                if((!xmlStrcmp(properties->name, (const xmlChar *) "times_played"))) {
+                    char *played = (char *) xmlNodeGetContent(properties);
+                    rom.times_played = strtol(played, NULL, 10);
+                    free(played);
+                }
 
                 properties = properties->next;
             }
