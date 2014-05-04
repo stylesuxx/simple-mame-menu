@@ -31,14 +31,14 @@ rom_data **games;
 
 char *mame_ini_path = NULL;
 const char *game_xml_path = NULL;
-bool redraw = false;
-int sorting = 0;
+
+int sorting = 0, n_sorts = 0;
 char *sort_menu_items[] = {"A..Z", "Z..A", "Favs", (char *) NULL};
 
+int i = 0;
 int width = 0, height = 0;
 int main_window_width = 0, main_window_height = 0;
 int info_window_width = 0, info_window_height = 0;
-int i, n_sorts;
 
 void build_main_window();
 void build_info_window();
@@ -180,7 +180,6 @@ void build_info_window()
 
 void build_game_menu()
 {
-    int i;
     switch(sorting) {
         case 0:
             qsort(games, (size_t) get_game_count(), sizeof(rom_data *), rom_slug_asc);
