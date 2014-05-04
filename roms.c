@@ -8,14 +8,19 @@
 #include "xmlparser.h"
 
 rom_data *roms = NULL;
-rom_data *games = NULL;
+
+rom_data **games_ptr = NULL;
 
 int num_games = 0;
 int num_roms = 0;
 int num_allocated = 0;
 
+const char *game_xml;
+
 int build_rom_list(const char *verify_command, const char *mame_xml_path, const char *game_xml_path)
 {
+    game_xml = game_xml_path;
+
     /* Try to load from custom list.
      *
      * If the custom list is not present, try to generate and save one.
@@ -33,11 +38,12 @@ int build_rom_list(const char *verify_command, const char *mame_xml_path, const 
 
     /* Build an array of available game roms. */
     if(get_rom_count() > 0) {
-        games = malloc(num_games * sizeof(rom_data));
+        games_ptr = malloc(num_games * sizeof(rom_data *));
+
         int i, counter = 0;
         for(i = 0; i < num_roms; i++)
             if(roms[i].bios != 0 && roms[i].device != 0)
-                memcpy(&games[counter++], &roms[i], sizeof(roms[i]));
+                games_ptr[counter++] = &roms[i];
 
         return 0;
     }
@@ -46,7 +52,7 @@ int build_rom_list(const char *verify_command, const char *mame_xml_path, const 
 }
 
 rom_data* get_roms() { return roms; }
-rom_data* get_games() { return games; }
+rom_data** get_all_games() { return games_ptr; }
 
 int get_game_count() { return num_games; }
 int get_rom_count() { return num_roms; }
@@ -55,8 +61,8 @@ void clear_roms()
 {
     int i;
 
-    if(games != NULL) {
-        free(games);
+    if(games_ptr != NULL) {
+        free(games_ptr);
     }
 
     if(roms != NULL) {
@@ -70,6 +76,15 @@ void clear_roms()
 
         free(roms);
     }
+}
+
+void increase_times_played(const char *slug) {
+    int i;
+    for(i = 0; i < get_game_count(); i++)
+        if(strcmp(games_ptr[i]->slug, slug) == 0)
+            games_ptr[i]->times_played++;
+
+    save_rom_list(game_xml);
 }
 
 int add_rom(rom_data item)
@@ -95,25 +110,6 @@ int add_rom(rom_data item)
 
     return num_roms;
 }
-
-int rom_slug_asc(const void *a, const void *b)
-{
-    const rom_data *g1 = a;
-    const rom_data *g2 = b;
-
-    return strcmp(g1->slug, g2->slug);
-}
-
-
-int rom_slug_desc(const void *a, const void *b)
-{
-    const rom_data *g1 = a;
-    const rom_data *g2 = b;
-
-    return strcmp(g2->slug, g1->slug);
-}
-
-
 
 /* Build the array of available games.
  *
@@ -214,6 +210,7 @@ int set_rom_info(const char *mame_xml_path)
         roms[i].manufacturer = xml_get_value(manufacturer);
         roms[i].bios = strcmp("yes", xml_get_value(bios));
         roms[i].device = strcmp("yes", xml_get_value(device));
+        roms[i].times_played = 0;
 
         if(roms[i].bios != 0 && roms[i].device != 0)
             num_games++;
@@ -254,6 +251,11 @@ int save_rom_list(const char *path)
         xmlNewChild(node, NULL, (xmlChar *) "manufacturer", (xmlChar *) roms[i].manufacturer);
         xmlNewChild(node, NULL, (xmlChar *) "year", (xmlChar *) roms[i].year);
         xmlNewChild(node, NULL, (xmlChar *) "state", (xmlChar *) roms[i].state);
+
+        char buffer[10];
+        snprintf(buffer, 10, "%d", roms[i].times_played);
+
+        xmlNewChild(node, NULL, (xmlChar *) "times_played", (xmlChar *) buffer);
     }
 
     if(xmlSaveFormatFileEnc(path, doc, "UTF-8", 1) == -1)
@@ -324,6 +326,10 @@ int load_rom_list(const char *path)
 
                 if((!xmlStrcmp(properties->name, (const xmlChar *) "description")))
                     rom.description = (char *) xmlNodeGetContent(properties);
+
+                char *ptr;
+                if((!xmlStrcmp(properties->name, (const xmlChar *) "times_played")))
+                    rom.times_played = strtol((char *) xmlNodeGetContent(properties), &ptr, 10);
 
                 properties = properties->next;
             }

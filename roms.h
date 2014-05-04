@@ -16,16 +16,19 @@ typedef struct rom_data {
   char *year;
   char *manufacturer;
   char *state;
+  int times_played;
   int bios;
   int device;
 } rom_data;
 
 int build_rom_list(const char *verify_command, const char *mame_xml_path, const char *game_xml_path);
 rom_data* get_roms();
-rom_data* get_games();
+rom_data** get_all_games();
 
 int get_rom_count();
 int get_game_count();
+
+void increase_times_played(const char *slug);
 
 int save_rom_list(const char *path);
 int load_rom_list(const char *path);
@@ -33,9 +36,5 @@ int get_available_roms(const char *verify_command);
 int set_rom_info(const char *xml_path);
 int add_rom(rom_data item);
 void clear_roms();
-
-/* Sorters */
-int rom_slug_asc(const void *a, const void *b);
-int rom_slug_desc(const void *a, const void *b);
 
 #endif

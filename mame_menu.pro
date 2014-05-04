@@ -10,9 +10,11 @@ LIBS += -lmenu
 
 SOURCES += main.c \
     xmlparser.c \
-    roms.c
+    roms.c \
+    romsorter.c
 
 HEADERS += \
     xmlparser.h \
-    roms.h
+    roms.h \
+    romsorter.h
 

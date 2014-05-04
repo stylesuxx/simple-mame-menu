@@ -2,13 +2,37 @@
 #include <string.h>
 #include <ncurses.h>
 #include <menu.h>
+#include <regex.h>
 
 #include "roms.h"
+#include "romsorter.h"
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof(a[0]))
-#define CTRLD   4
+
+WINDOW *main_window;
+WINDOW *manufacturer_value;
+WINDOW *year_value;
+WINDOW *times_played_value;
+WINDOW *game_state_value;
+WINDOW *sorter_container;
+
+MENU *game_menu = NULL;
+MENU *sort_menu;
+ITEM **game_items;
+ITEM **sort_items;
+
+rom_data **games;
+
+char *ini_path;
+bool redraw = false;
+int sorting = 0;
+char *sort_menu_items[] = {"A..Z", "Z..A", "Favs", (char *) NULL};
 
 void print_in_middle(WINDOW *win, int starty, int startx, int width, char *string, chtype color);
+void set_colors();
+void process_input();
+void draw_game_menu();
+void update_values(int position);
 void usage();
 
 int main(int argc, char *argv[])
@@ -18,45 +42,37 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    char *rom_path = argv[1]; //"/home/babs/Roms/";
-    char *mame_xml_path = argv[2]; //"testing/mame.xml";
-    const char *game_xml_path = argv[3]; //"testing/custom_1.xml";
-
-    ITEM **my_items;
-    int c;
-    WINDOW *main_window;
-    MENU *game_menu;
+    ini_path = argv[1];
+    char *mame_xml_path = argv[2];
+    const char *game_xml_path = argv[3];
 
     WINDOW *info_window;
     WINDOW *manufacturer_label;
-    WINDOW *manufacturer_value;
     WINDOW *year_label;
-    WINDOW *year_value;
-    WINDOW *platform_label;
-    WINDOW *platform_value;
+    WINDOW *times_played_label;
+    WINDOW *game_state_label;
+    WINDOW *sorter_label;
 
-    int i;
+    int i, n_sorts;
     int width = 0, height = 0;
     int main_window_width = 0, main_window_height = 0;
     int info_window_width = 0, info_window_height = 0;
 
-    char *verify_command_template = "mame -rompath %s -verifyroms";
-    int length = strlen(rom_path) + (strlen(verify_command_template) - 2) + 1;
+    char *verify_command_template = "mame -inipath %s -verifyroms";
+    int length = strlen(ini_path) + (strlen(verify_command_template) - 2) + 1;
     char verify_command[length];
-    sprintf(verify_command, verify_command_template, rom_path);
+    sprintf(verify_command, verify_command_template, ini_path);
     verify_command[length - 1] = '\0';
 
-    /* Generate a list of available games and sort them ascending */
-    rom_data *games;
-    build_rom_list(verify_command, mame_xml_path, game_xml_path);
-    games = get_games();
 
+    /* Generate a list of available games and sort them ascending */
+    build_rom_list(verify_command, mame_xml_path, game_xml_path);
+    games = get_all_games();
     if(get_game_count() < 1) {
         fprintf(stderr, "There are no games in your rom path...\n");
         return 1;
     }
-    qsort(games, (size_t) get_game_count(), sizeof(rom_data), rom_slug_asc);
-    //return -1;
+    qsort(games, (size_t) get_game_count(), sizeof(rom_data *), rom_slug_asc);
 
     /* Initialize curses */
     initscr();
@@ -64,8 +80,7 @@ int main(int argc, char *argv[])
     cbreak();
     noecho();
     keypad(stdscr, TRUE);
-    init_pair(1, COLOR_RED, COLOR_BLACK);
-    init_pair(2, COLOR_CYAN, COLOR_BLACK);
+    set_colors();
     getmaxyx(stdscr, height, width);
 
     info_window_width = 30;
@@ -73,14 +88,19 @@ int main(int argc, char *argv[])
     main_window_width = width - info_window_width;
     main_window_height = info_window_height;
 
-    /* Create items */
-    my_items = malloc(get_game_count() * sizeof(ITEM *));
-    for(i = 0; i < get_game_count(); i++) {
-        my_items[i] = new_item(games[i].slug, games[i].description);
-    }
+    /* Create game menu */
+    game_items = malloc(get_game_count() * sizeof(ITEM *));
+    for(i = 0; i < get_game_count(); i++)
+        game_items[i] = new_item(games[i]->slug, games[i]->description);
+    game_menu = new_menu(game_items);
 
-    /* Crate the game menu */
-    game_menu = new_menu(my_items);
+    /* Create sorter menu */
+    n_sorts = ARRAY_SIZE(sort_menu_items);
+    sort_items = (ITEM **)calloc(n_sorts, sizeof(ITEM *));
+    for(i = 0; i < n_sorts; ++i)
+        sort_items[i] = new_item(sort_menu_items[i], sort_menu_items[i]);
+    sort_menu = new_menu(sort_items);
+    menu_opts_off(sort_menu, O_SHOWDESC);
 
     /* Create the window to be associated with the menu */
     main_window = newwin(main_window_height, main_window_width, 0, 0);
@@ -96,29 +116,34 @@ int main(int argc, char *argv[])
     manufacturer_label = newwin(1, info_window_width - 2, 3, main_window_width + 1);
     mvwprintw(manufacturer_label, 0, 0, "%s", "Manufacturer:");
 
-    manufacturer_value = newwin(1, info_window_width - 2, 4, main_window_width + 1);
-
     year_label = newwin(1, info_window_width - 2, 6, main_window_width + 1);
     mvwprintw(year_label, 0, 0, "%s", "Year:");
 
+    times_played_label = newwin(1, info_window_width - 2, 9, main_window_width + 1);
+    mvwprintw(times_played_label, 0, 0, "%s", "Times played:");
+
+    game_state_label = newwin(1, info_window_width - 2, 12, main_window_width + 1);
+    mvwprintw(game_state_label, 0, 0, "%s", "Game state:");
+
+    sorter_label = newwin(1, info_window_width - 2, 15, main_window_width + 1);
+    mvwprintw(sorter_label, 0, 0, "%s", "Sort by [Btn1 + <-|->]:");
+
+    sorter_container = newwin(1, info_window_width - 2, 16, main_window_width + 1);
+
+    manufacturer_value = newwin(1, info_window_width - 2, 4, main_window_width + 1);
     year_value = newwin(1, info_window_width - 2, 7, main_window_width + 1);
+    times_played_value = newwin(1, info_window_width - 2, 10, main_window_width + 1);
+    game_state_value = newwin(1, info_window_width - 2, 13, main_window_width + 1);
 
-    platform_label = newwin(1, info_window_width - 2, 9, main_window_width + 1);
-    mvwprintw(platform_label, 0, 0, "%s", "Platform:");
-
-    platform_value = newwin(1, info_window_width - 2, 10, main_window_width + 1);
-
-    mvwprintw(manufacturer_value, 0, 0, "%s", games[0].manufacturer);
-    mvwprintw(year_value, 0, 0, "%s", games[0].year);
-    //mvwprintw(platform_value, 0, 0, "%s", games[0].platform);
-
-    /* Set main window and sub window */
     set_menu_win(game_menu, main_window);
     set_menu_sub(game_menu, derwin(main_window, main_window_height - 4, main_window_width - 2, 3, 1));
     set_menu_format(game_menu, main_window_height - 4, 1);
-
-    /* Set menu mark to the string " > " */
     set_menu_mark(game_menu, " > ");
+
+    set_menu_win(sort_menu, sorter_container);
+    set_menu_sub(sort_menu, derwin(sorter_container, 1, 5, 3, 1));
+    set_menu_format(sort_menu, 1, 3);
+    set_menu_mark(sort_menu, " ");
 
     /* Print a border around the main window and print a title */
     box(main_window, 0, 0);
@@ -127,23 +152,75 @@ int main(int argc, char *argv[])
     mvwhline(main_window, 2, 1, ACS_HLINE, width);
     mvwaddch(main_window, 2, main_window_width - 1, ACS_RTEE);
 
-    /* Post the menu */
+    /* Post the menues */
     post_menu(game_menu);
-    wrefresh(main_window);
+    post_menu(sort_menu);
 
     wrefresh(info_window);
     wrefresh(manufacturer_label);
     wrefresh(year_label);
-    wrefresh(platform_label);
+    wrefresh(times_played_label);
+    wrefresh(game_state_label);
+    wrefresh(sorter_label);
+    wrefresh(sorter_container);
 
-    wrefresh(manufacturer_value);
-    wrefresh(year_value);
-    //wrefresh(platform_value);
+    update_values(0);
 
     refresh();
 
-    while((c = wgetch(main_window)) != KEY_BACKSPACE) {
-        switch(c) {
+    process_input();
+
+    /* Clean up */
+    unpost_menu(game_menu);
+    free_menu(game_menu);
+    for(i = 0; i < get_game_count(); i++)
+        free_item(game_items[i]);
+    free(game_items);
+    clear_roms();
+    endwin();
+
+    return 0;
+}
+
+
+void draw_game_menu()
+{
+    int i;
+
+    switch(sorting) {
+        case 0:
+            qsort(games, (size_t) get_game_count(), sizeof(rom_data *), rom_slug_asc);
+            break;
+        case 1:
+            qsort(games, (size_t) get_game_count(), sizeof(rom_data *), rom_slug_desc);
+            break;
+        case 2:
+            qsort(games, (size_t) get_game_count(), sizeof(rom_data *), rom_times_played);
+            break;
+    }
+
+    if(game_menu != NULL) {
+        unpost_menu(game_menu);
+        for(i = 0; i < get_game_count(); i++)
+            free_item(game_items[i]);
+    }
+
+    for(i = 0; i < get_game_count(); i++)
+        game_items[i] = new_item(games[i]->slug, games[i]->description);
+
+    set_menu_items(game_menu, game_items);
+    post_menu(game_menu);
+
+    refresh();
+}
+
+void process_input()
+{
+    int user_input;
+    char buffer[256];
+    int current = item_index(current_item(game_menu));
+    while((user_input = wgetch(main_window)) != 27) {
+        switch(user_input) {
             case KEY_DOWN:
                 menu_driver(game_menu, REQ_DOWN_ITEM);
                 break;
@@ -156,38 +233,68 @@ int main(int argc, char *argv[])
             case KEY_LEFT:
                 menu_driver(game_menu, REQ_SCR_UPAGE);
                 break;
-            case 0xA:
+            case 0x22F:
+                menu_driver(sort_menu, REQ_RIGHT_ITEM);
+                sorting ++;
+                if(sorting > 2)
+                    sorting = 2;
+
+                draw_game_menu();
                 break;
+            case 0x220:
+                menu_driver(sort_menu, REQ_LEFT_ITEM);
+                sorting --;
+                if(sorting < 0)
+                    sorting = 0;
+
+                draw_game_menu();
+                break;
+
+            case 0x20:
+            case 0x0A:
+                increase_times_played(games[current]->slug);
+                sprintf(buffer, "mame -inipath %s %s > /dev/null 2>&1", ini_path, games[current]->slug);
+                system(buffer);
+                break;
+
+            /*
+            default:
+                fprintf(stderr, "Charcter pressed is '%d'", user_input);
+                break;
+            */
         }
 
-        int current = item_index(current_item(game_menu));
-
-        werase(manufacturer_value);
-        werase(year_value);
-        werase(platform_value);
-        mvwprintw(manufacturer_value, 0, 0, "%s", games[current].manufacturer);
-        mvwprintw(year_value, 0, 0, "%s", games[current].year);
-        //mvwprintw(platform_value, 0, 0, "%s", games[current].platform);
-
-        wrefresh(manufacturer_value);
-        wrefresh(year_value);
-        //wrefresh(platform_value);
-        wrefresh(main_window);
+        current = item_index(current_item(game_menu));
+        update_values(current);
     }
+}
 
-    /* Unpost and free all the memory taken up */
-    unpost_menu(game_menu);
-    free_menu(game_menu);
+/* Update all necesary info when game selection changes */
+void update_values(int position)
+{
+    werase(manufacturer_value);
+    werase(year_value);
+    werase(times_played_value);
+    werase(game_state_value);
 
-    for(i = 0; i < get_game_count(); i++)
-        free_item(my_items[i]);
+    mvwprintw(manufacturer_value, 0, 0, "%s", games[position]->manufacturer);
+    mvwprintw(year_value, 0, 0, "%s", games[position]->year);
+    mvwprintw(times_played_value, 0, 0, "%d", games[position]->times_played);
+    mvwprintw(game_state_value, 0, 0, "%s", games[position]->state);
 
-    free(my_items);
-    clear_roms();
+    wrefresh(manufacturer_value);
+    wrefresh(year_value);
+    wrefresh(times_played_value);
+    wrefresh(game_state_value);
 
-    endwin();
+    wrefresh(main_window);
+    wrefresh(sorter_container);
+}
 
-    return 0;
+void set_colors()
+{
+    init_pair(1, COLOR_RED, COLOR_BLACK);
+    init_pair(2, COLOR_CYAN, COLOR_BLACK);
 }
 
 void print_in_middle(WINDOW *win, int starty, int startx, int width, char *string, chtype color)
@@ -214,5 +321,5 @@ void print_in_middle(WINDOW *win, int starty, int startx, int width, char *strin
 }
 
 void usage() {
-    printf("Usage: ./mame_menu ROMPATH MAME_XML_PATH GAME_XML_PATH\n");
+    printf("Usage: ./mame_menu PATH_TO_INIS MAME_XML_PATH GAME_XML_PATH\n");
 }
