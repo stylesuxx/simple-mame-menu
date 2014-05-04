@@ -16,14 +16,14 @@ WINDOW *times_played_value;
 WINDOW *game_state_value;
 WINDOW *sorter_container;
 
-MENU *game_menu = NULL;
+MENU *game_menu;
 MENU *sort_menu;
 ITEM **game_items;
 ITEM **sort_items;
 
 rom_data **games;
 
-char *ini_path;
+char *mame_ini_path;
 bool redraw = false;
 int sorting = 0;
 char *sort_menu_items[] = {"A..Z", "Z..A", "Favs", (char *) NULL};
@@ -37,14 +37,14 @@ void usage();
 
 int main(int argc, char *argv[])
 {
-    if(argc < 4) {
+    if(argc < 3) {
         usage();
         return 1;
     }
 
-    ini_path = argv[1];
-    char *mame_xml_path = argv[2];
-    const char *game_xml_path = argv[3];
+    mame_ini_path = argv[1];
+    //char *mame_xml_path = argv[2];
+    const char *game_xml_path = argv[2];
 
     WINDOW *info_window;
     WINDOW *manufacturer_label;
@@ -58,18 +58,11 @@ int main(int argc, char *argv[])
     int main_window_width = 0, main_window_height = 0;
     int info_window_width = 0, info_window_height = 0;
 
-    char *verify_command_template = "mame -inipath %s -verifyroms";
-    int length = strlen(ini_path) + (strlen(verify_command_template) - 2) + 1;
-    char verify_command[length];
-    sprintf(verify_command, verify_command_template, ini_path);
-    verify_command[length - 1] = '\0';
-
-
     /* Generate a list of available games and sort them ascending */
-    build_rom_list(verify_command, mame_xml_path, game_xml_path);
+    build_rom_list(mame_ini_path, game_xml_path);
     games = get_all_games();
     if(get_game_count() < 1) {
-        fprintf(stderr, "There are no games in your rom path...\n");
+        fprintf(stderr, "There are no games in your rom path.\nCheck that your roms are in one of the rompaths configured in mame.ini\n");
         return 1;
     }
     qsort(games, (size_t) get_game_count(), sizeof(rom_data *), rom_slug_asc);
@@ -88,10 +81,11 @@ int main(int argc, char *argv[])
     main_window_width = width - info_window_width;
     main_window_height = info_window_height;
 
-    /* Create game menu */
-    game_items = malloc(get_game_count() * sizeof(ITEM *));
+    /* Create game menu (game_items need to be NULL terminated) */
+    game_items = malloc((get_game_count() + 1) * sizeof(ITEM *));
     for(i = 0; i < get_game_count(); i++)
         game_items[i] = new_item(games[i]->slug, games[i]->description);
+    game_items[get_game_count()] = NULL;
     game_menu = new_menu(game_items);
 
     /* Create sorter menu */
@@ -253,7 +247,7 @@ void process_input()
             case 0x20:
             case 0x0A:
                 increase_times_played(games[current]->slug);
-                sprintf(buffer, "mame -inipath %s %s > /dev/null 2>&1", ini_path, games[current]->slug);
+                sprintf(buffer, "mame -inipath %s %s > /dev/null 2>&1", mame_ini_path, games[current]->slug);
                 system(buffer);
                 break;
 
@@ -321,5 +315,5 @@ void print_in_middle(WINDOW *win, int starty, int startx, int width, char *strin
 }
 
 void usage() {
-    printf("Usage: ./mame_menu PATH_TO_INIS MAME_XML_PATH GAME_XML_PATH\n");
+    printf("Usage: ./mame_menu PATH_TO_INIS GAME_XML_PATH\n");
 }
