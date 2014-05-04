@@ -42,8 +42,8 @@ int i, n_sorts;
 
 void build_main_window();
 void build_info_window();
+void build_game_menu();
 void process_input();
-void update_game_menu();
 void update_values(int position);
 
 void print_in_middle(WINDOW *win, int starty, int startx, int width, char *string, chtype color);
@@ -120,19 +120,7 @@ void build_main_window()
     mvwhline(main_window, 2, 1, ACS_HLINE, width);
     mvwaddch(main_window, 2, main_window_width - 1, ACS_RTEE);
 
-    /* Create vartical game menu (game_items need to be NULL terminated) */
-    game_items = malloc((get_game_count() + 1) * sizeof(ITEM *));
-    for(i = 0; i < get_game_count(); i++)
-        game_items[i] = new_item(games[i]->slug, games[i]->description);
-    game_items[get_game_count()] = NULL;
-    game_menu = new_menu(game_items);
-
-    set_menu_win(game_menu, main_window);
-    set_menu_sub(game_menu, derwin(main_window, main_window_height - 4, main_window_width - 2, 3, 1));
-    set_menu_format(game_menu, main_window_height - 4, 1);
-    set_menu_mark(game_menu, " > ");
-
-    post_menu(game_menu);
+    build_game_menu();
 }
 
 void build_info_window()
@@ -190,10 +178,9 @@ void build_info_window()
 }
 
 
-void update_game_menu()
+void build_game_menu()
 {
     int i;
-
     switch(sorting) {
         case 0:
             qsort(games, (size_t) get_game_count(), sizeof(rom_data *), rom_slug_asc);
@@ -208,14 +195,23 @@ void update_game_menu()
 
     if(game_menu != NULL) {
         unpost_menu(game_menu);
-        for(i = 0; i < get_game_count(); i++)
+        free_menu(game_menu);
+        for(i = 0; i < get_game_count() + 1 ; i++)
             free_item(game_items[i]);
+
+        free(game_items);
     }
 
+    game_items = malloc((get_game_count() + 1) * sizeof(ITEM *));
     for(i = 0; i < get_game_count(); i++)
         game_items[i] = new_item(games[i]->slug, games[i]->description);
+    game_items[get_game_count()] = NULL;
 
-    set_menu_items(game_menu, game_items);
+    game_menu = new_menu(game_items);
+    set_menu_win(game_menu, main_window);
+    set_menu_sub(game_menu, derwin(main_window, main_window_height - 4, main_window_width - 2, 3, 1));
+    set_menu_format(game_menu, main_window_height - 4, 1);
+    set_menu_mark(game_menu, " > ");
     post_menu(game_menu);
 
     refresh();
@@ -246,7 +242,7 @@ void process_input()
                 if(sorting > 2)
                     sorting = 2;
 
-                update_game_menu();
+                build_game_menu();
                 break;
             case 0x220:
                 menu_driver(sort_menu, REQ_LEFT_ITEM);
@@ -254,7 +250,7 @@ void process_input()
                 if(sorting < 0)
                     sorting = 0;
 
-                update_game_menu();
+                build_game_menu();
                 break;
 
             case 0x20:
