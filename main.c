@@ -10,28 +10,43 @@
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof(a[0]))
 
 WINDOW *main_window;
+MENU *game_menu;
+ITEM **game_items;
+
+WINDOW *info_window;
+WINDOW *manufacturer_label;
+WINDOW *year_label;
+WINDOW *times_played_label;
+WINDOW *game_state_label;
+WINDOW *sorter_label;
 WINDOW *manufacturer_value;
 WINDOW *year_value;
 WINDOW *times_played_value;
 WINDOW *game_state_value;
 WINDOW *sorter_container;
-
-MENU *game_menu;
 MENU *sort_menu;
-ITEM **game_items;
 ITEM **sort_items;
 
 rom_data **games;
 
-char *mame_ini_path;
+char *mame_ini_path = NULL;
+const char *game_xml_path = NULL;
 bool redraw = false;
 int sorting = 0;
 char *sort_menu_items[] = {"A..Z", "Z..A", "Favs", (char *) NULL};
 
+int width = 0, height = 0;
+int main_window_width = 0, main_window_height = 0;
+int info_window_width = 0, info_window_height = 0;
+int i, n_sorts;
+
+void build_main_window();
+void build_info_window();
+void process_input();
+
 void print_in_middle(WINDOW *win, int starty, int startx, int width, char *string, chtype color);
 void set_colors();
-void process_input();
-void draw_game_menu();
+void update_game_menu();
 void update_values(int position);
 void usage();
 
@@ -43,19 +58,7 @@ int main(int argc, char *argv[])
     }
 
     mame_ini_path = argv[1];
-    const char *game_xml_path = argv[2];
-
-    WINDOW *info_window;
-    WINDOW *manufacturer_label;
-    WINDOW *year_label;
-    WINDOW *times_played_label;
-    WINDOW *game_state_label;
-    WINDOW *sorter_label;
-
-    int i, n_sorts;
-    int width = 0, height = 0;
-    int main_window_width = 0, main_window_height = 0;
-    int info_window_width = 0, info_window_height = 0;
+    game_xml_path = argv[2];
 
     /* Generate a list of available games and sort them ascending */
     build_rom_list(mame_ini_path, game_xml_path);
@@ -73,12 +76,49 @@ int main(int argc, char *argv[])
     noecho();
     keypad(stdscr, TRUE);
     set_colors();
-    getmaxyx(stdscr, height, width);
 
+    /* Build the UI depending on size */
+    getmaxyx(stdscr, height, width);
     info_window_width = 30;
     info_window_height = height;
     main_window_width = width - info_window_width;
     main_window_height = info_window_height;
+
+    build_main_window();
+    build_info_window();
+    update_values(0);
+    refresh();
+
+    /* Process user input until ESC */
+    process_input();
+
+    /* Clean up */
+    unpost_menu(game_menu);
+    free_menu(game_menu);
+    for(i = 0; i < get_game_count(); i++)
+        free_item(game_items[i]);
+    free(game_items);
+    unpost_menu(sort_menu);
+    free_menu(sort_menu);
+    for(i = 0; i < 3; i++)
+        free_item(sort_items[i]);
+    free(sort_items);
+    clear_roms();
+    endwin();
+
+    return 0;
+}
+
+void build_main_window()
+{
+    main_window = newwin(main_window_height, main_window_width, 0, 0);
+    keypad(main_window, TRUE);
+
+    box(main_window, 0, 0);
+    print_in_middle(main_window, 1, 0, main_window_width, "Game selection", COLOR_PAIR(1));
+    mvwaddch(main_window, 2, 0, ACS_LTEE);
+    mvwhline(main_window, 2, 1, ACS_HLINE, width);
+    mvwaddch(main_window, 2, main_window_width - 1, ACS_RTEE);
 
     /* Create game menu (game_items need to be NULL terminated) */
     game_items = malloc((get_game_count() + 1) * sizeof(ITEM *));
@@ -87,18 +127,17 @@ int main(int argc, char *argv[])
     game_items[get_game_count()] = NULL;
     game_menu = new_menu(game_items);
 
-    /* Create sorter menu */
-    n_sorts = ARRAY_SIZE(sort_menu_items);
-    sort_items = (ITEM **)calloc(n_sorts, sizeof(ITEM *));
-    for(i = 0; i < n_sorts; ++i)
-        sort_items[i] = new_item(sort_menu_items[i], sort_menu_items[i]);
-    sort_menu = new_menu(sort_items);
-    menu_opts_off(sort_menu, O_SHOWDESC);
+    set_menu_win(game_menu, main_window);
+    set_menu_sub(game_menu, derwin(main_window, main_window_height - 4, main_window_width - 2, 3, 1));
+    set_menu_format(game_menu, main_window_height - 4, 1);
+    set_menu_mark(game_menu, " > ");
 
-    /* Create the window to be associated with the menu */
-    main_window = newwin(main_window_height, main_window_width, 0, 0);
-    keypad(main_window, TRUE);
+    /* Post the menues */
+    post_menu(game_menu);
+}
 
+void build_info_window()
+{
     info_window = newwin(info_window_height, info_window_width, 0, main_window_width);
     box(info_window, 0, 0);
     print_in_middle(info_window, 1, 0, info_window_width, "Info", COLOR_PAIR(1));
@@ -128,25 +167,19 @@ int main(int argc, char *argv[])
     times_played_value = newwin(1, info_window_width - 2, 10, main_window_width + 1);
     game_state_value = newwin(1, info_window_width - 2, 13, main_window_width + 1);
 
-    set_menu_win(game_menu, main_window);
-    set_menu_sub(game_menu, derwin(main_window, main_window_height - 4, main_window_width - 2, 3, 1));
-    set_menu_format(game_menu, main_window_height - 4, 1);
-    set_menu_mark(game_menu, " > ");
+    /* Create sorter menu */
+    n_sorts = ARRAY_SIZE(sort_menu_items);
+    sort_items = (ITEM **)calloc(n_sorts, sizeof(ITEM *));
+    for(i = 0; i < n_sorts; ++i)
+        sort_items[i] = new_item(sort_menu_items[i], sort_menu_items[i]);
+    sort_menu = new_menu(sort_items);
+    menu_opts_off(sort_menu, O_SHOWDESC);
 
     set_menu_win(sort_menu, sorter_container);
     set_menu_sub(sort_menu, derwin(sorter_container, 1, 5, 3, 1));
     set_menu_format(sort_menu, 1, 3);
     set_menu_mark(sort_menu, " ");
 
-    /* Print a border around the main window and print a title */
-    box(main_window, 0, 0);
-    print_in_middle(main_window, 1, 0, main_window_width, "Game selection", COLOR_PAIR(1));
-    mvwaddch(main_window, 2, 0, ACS_LTEE);
-    mvwhline(main_window, 2, 1, ACS_HLINE, width);
-    mvwaddch(main_window, 2, main_window_width - 1, ACS_RTEE);
-
-    /* Post the menues */
-    post_menu(game_menu);
     post_menu(sort_menu);
 
     wrefresh(info_window);
@@ -156,36 +189,10 @@ int main(int argc, char *argv[])
     wrefresh(game_state_label);
     wrefresh(sorter_label);
     wrefresh(sorter_container);
-
-    update_values(0);
-
-    refresh();
-
-    process_input();
-
-    /* Clean up */
-    unpost_menu(game_menu);
-    free_menu(game_menu);
-    for(i = 0; i < get_game_count(); i++)
-        free_item(game_items[i]);
-    free(game_items);
-
-
-    unpost_menu(sort_menu);
-    free_menu(sort_menu);
-    for(i = 0; i < 3; i++)
-        free_item(sort_items[i]);
-    free(sort_items);
-
-    clear_roms();
-
-    endwin();
-
-    return 0;
 }
 
 
-void draw_game_menu()
+void update_game_menu()
 {
     int i;
 
@@ -241,7 +248,7 @@ void process_input()
                 if(sorting > 2)
                     sorting = 2;
 
-                draw_game_menu();
+                update_game_menu();
                 break;
             case 0x220:
                 menu_driver(sort_menu, REQ_LEFT_ITEM);
@@ -249,7 +256,7 @@ void process_input()
                 if(sorting < 0)
                     sorting = 0;
 
-                draw_game_menu();
+                update_game_menu();
                 break;
 
             case 0x20:
