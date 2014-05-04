@@ -197,7 +197,7 @@ void draw_game_menu()
             qsort(games, (size_t) get_game_count(), sizeof(rom_data *), rom_slug_desc);
             break;
         case 2:
-            qsort(games, (size_t) get_game_count(), sizeof(rom_data *), rom_times_played);
+            qsort(games, (size_t) get_game_count(), sizeof(rom_data *), rom_played_desc);
             break;
     }
 

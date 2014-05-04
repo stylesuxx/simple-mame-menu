@@ -20,7 +20,7 @@ int rom_slug_desc(const void *a, const void *b)
     return strcmp(g2->slug, g1->slug);
 }
 
-int rom_times_played(const void *a, const void *b)
+int rom_played_desc(const void *a, const void *b)
 {
     const rom_data *g1 = *(rom_data **) a;
     const rom_data *g2 = *(rom_data **) b;

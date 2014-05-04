@@ -16,5 +16,6 @@ SOURCES += main.c \
 HEADERS += \
     xmlparser.h \
     roms.h \
-    romsorter.h
+    romsorter.h \
+    romdata.h
 
