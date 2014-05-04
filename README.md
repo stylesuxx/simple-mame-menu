@@ -13,8 +13,10 @@ A simple ncurses based frontend for mame.
 
 ## Controlls
 
-up/down:           select item
-left/right:        scroll page up/down
-CTRL + left/right: change sorting
-SELECT/ENTER:      start game
-ESC:               exit
+The menu can easyli be controlled with the same keys as the default mame config for player 1.
+
+    up/down:                choose game
+    left/right:             scroll page up/down
+    CTRL/BTN1 + left/right: change sort
+    SELECT/ENTER/BTN3:      start game
+    ESC:                    exit
