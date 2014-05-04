@@ -5,7 +5,7 @@
 
 #include "xmlparser.h"
 
-xmlDocPtr xml;
+xmlDocPtr xml = NULL;
 
 int xml_open(const char *path)
 {
@@ -25,9 +25,9 @@ void xml_close()
 
 char* xml_get_value(char *xpath_expression)
 {
-    xmlXPathContextPtr xpath_context;
-    xmlXPathObjectPtr xpath_object;
-    xmlNodePtr current_node;
+    xmlXPathContextPtr xpath_context = NULL;
+    xmlXPathObjectPtr xpath_object = NULL;
+    xmlNodePtr current_node = NULL;
 
     xmlChar *xml_value = NULL;
     char *value = NULL;
