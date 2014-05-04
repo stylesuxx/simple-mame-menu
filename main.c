@@ -43,7 +43,6 @@ int main(int argc, char *argv[])
     }
 
     mame_ini_path = argv[1];
-    //char *mame_xml_path = argv[2];
     const char *game_xml_path = argv[2];
 
     WINDOW *info_window;
@@ -170,7 +169,16 @@ int main(int argc, char *argv[])
     for(i = 0; i < get_game_count(); i++)
         free_item(game_items[i]);
     free(game_items);
+
+
+    unpost_menu(sort_menu);
+    free_menu(sort_menu);
+    for(i = 0; i < 3; i++)
+        free_item(sort_items[i]);
+    free(sort_items);
+
     clear_roms();
+
     endwin();
 
     return 0;
